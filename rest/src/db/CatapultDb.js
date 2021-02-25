@@ -114,7 +114,7 @@ class CatapultDb {
 	}
 
 	connect(url, dbName, connectionPoolSize) {
-		return connector.connectToDatabase(url, dbName, connectionPoolSize)
+		return connector.connectToDatabase(url, dbName, connectionPoolSize || 10)
 			.then(client => {
 				this.client = client;
 				this.database = client.db();
@@ -166,9 +166,9 @@ class CatapultDb {
 	 * @returns {Promise} Promise that resolves to the sizes of collections in the database.
 	 */
 	storageInfo() {
-		const blockCountPromise = this.database.collection('blocks').countDocuments();
-		const transactionCountPromise = this.database.collection('transactions').countDocuments();
-		const accountCountPromise = this.database.collection('accounts').countDocuments();
+		const blockCountPromise = this.database.collection('blocks').estimatedDocumentCount();
+		const transactionCountPromise = this.database.collection('transactions').estimatedDocumentCount();
+		const accountCountPromise = this.database.collection('accounts').estimatedDocumentCount();
 		return Promise.all([blockCountPromise, transactionCountPromise, accountCountPromise])
 			.then(storageInfo => ({ numBlocks: storageInfo[0], numTransactions: storageInfo[1], numAccounts: storageInfo[2] }));
 	}
@@ -491,13 +491,14 @@ class CatapultDb {
 					const newConditions = { _id: { $in: accountIds } };
 					// repeat the response with the found and sorted account ids, so that the result can be complete with all the mosaics
 					// Second query set pageIndex to 0;
-					options.pageNumber = 1;
-					return this.queryPagedDocuments(newConditions, [], {}, 'accounts', options)
+					return this.queryPagedDocuments(newConditions, [], {}, 'accounts',
+						{ pageSize, pageNumber: 1 })
 						.then(fullAccountsPage => {
 							// $in results do not preserve query order
 							fullAccountsPage.data.sort((account1, account2) =>
 								accountIds.findIndex(accountId => accountId.equals(account1.id))
 								- accountIds.findIndex(accountId => accountId.equals(account2.id)));
+							fullAccountsPage.pagination.pageNumber = options.pageNumber;
 							return fullAccountsPage;
 						});
 				});
