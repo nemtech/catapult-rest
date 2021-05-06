@@ -221,7 +221,6 @@ describe('model schema builder', () => {
 				'blockHeader.transactionsHash',
 				'blockHeader.receiptsHash',
 				'blockHeader.stateHash',
-				'blockHeader.beneficiaryAddress',
 				'blockHeader.previousImportanceBlockHash',
 				'blockHeader.signature',
 				'blockHeader.signerPublicKey',
@@ -407,6 +406,16 @@ describe('model schema builder', () => {
 				'votingPublicKey.endEpoch'
 			]);
 		});
+
+		it('exposes correct encodedAddress properties', () => {
+			// Act:
+			const matchingProperties = extractSchemaPropertiesWithType('encodedAddress');
+
+			// Assert:
+			expect(matchingProperties).to.deep.equal([
+				'blockHeader.beneficiaryAddress',
+			]);
+		})
 
 		// endregion
 	});
