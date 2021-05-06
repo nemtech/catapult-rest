@@ -413,9 +413,9 @@ describe('model schema builder', () => {
 
 			// Assert:
 			expect(matchingProperties).to.deep.equal([
-				'blockHeader.beneficiaryAddress',
+				'blockHeader.beneficiaryAddress'
 			]);
-		})
+		});
 
 		// endregion
 	});
