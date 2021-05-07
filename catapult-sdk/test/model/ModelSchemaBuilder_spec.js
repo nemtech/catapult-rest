@@ -242,7 +242,6 @@ describe('model schema builder', () => {
 
 				'transactionStatus.hash',
 
-				'account.address',
 				'account.publicKey',
 				'accountLinkPublicKey.publicKey',
 				'votingPublicKey.publicKey',
@@ -413,7 +412,8 @@ describe('model schema builder', () => {
 
 			// Assert:
 			expect(matchingProperties).to.deep.equal([
-				'blockHeader.beneficiaryAddress'
+				'blockHeader.beneficiaryAddress',
+				'account.address'
 			]);
 		});
 
