@@ -19,12 +19,25 @@
  * along with Catapult.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-const { convertToLong, buildOffsetCondition } = require('../../db/dbUtils');
 const catapult = require('catapult-sdk');
+const { convertToLong, buildOffsetCondition } = require('../../db/dbUtils');
 
 const { convert, uint64 } = catapult.utils;
 
 const isNamespaceId = id => 0 !== (0x80 & convert.hexToUint8(uint64.toHex(id))[0]);
+
+const createLatestConditions = (height) => {
+	if (height) {
+		return ({
+			$and: [{
+				$or: [
+					{ 'mosaic.duration': convertToLong(0) },
+					{ 'mosaic.duration': { $gt: height } }]
+			}]
+		});
+	}
+	return {};
+};
 
 class ReceiptsDb {
 	/**
@@ -43,7 +56,7 @@ class ReceiptsDb {
 	 * `pageSize` and `pageNumber`. 'sortField' must be within allowed 'sortingOptions'.
 	 * @returns {Promise.<object>} Transaction statements page.
 	 */
-	transactionStatements(filters, options) {
+	async transactionStatements(filters, options) {
 		const sortingOptions = { id: '_id' };
 
 		let conditions = {};
@@ -68,8 +81,9 @@ class ReceiptsDb {
 			conditions['statement.receipts.targetAddress'] = Buffer.from(filters.targetAddress);
 
 		if (undefined !== filters.artifactId) {
-			const artifactIdType = isNamespaceId(filters.artifactId) ? 'namespaceId' : 'mosaicId';
-			conditions[[`statement.receipts.${artifactIdType}`]] = convertToLong(filters.artifactId);
+			const isNamespace = isNamespaceId(filters.artifactId);
+			const mosaicIds = !isNamespace ? [convertToLong(filters.artifactId)] : await this.mosaicIdsByNamespaceId(filters.artifactId);
+			conditions[`statement.receipts.mosaicId`] = { $in: mosaicIds };
 		}
 
 		if (undefined !== filters.fromHeight || undefined !== filters.toHeight) {
@@ -110,6 +124,41 @@ class ReceiptsDb {
 
 		const sortConditions = { [sortingOptions[options.sortField]]: options.sortDirection };
 		return this.catapultDb.queryPagedDocuments(conditions, [], sortConditions, `${artifact}ResolutionStatements`, options);
+	}
+
+	/**
+	 * Retrieves active mosaics given their ids.
+	 * @param {Array.<module:catapult.utils/uint64~uint64>} ids Mosaic ids.
+	 * @returns {Promise.<array>} Mosaics.
+	 */
+	async activeMosaicsByIds(ids) {
+		const { height } = await this.catapultDb.chainStatisticCurrent();
+		const activeConditions = await createLatestConditions(height);
+
+		const conditions = { $and: [] };
+
+		conditions.$and.push({ 'mosaic.id': { $in: ids } });
+		conditions.$and.push(activeConditions);
+
+		return this.catapultDb.queryDocuments('mosaics', conditions);
+	}
+
+	/**
+	 * Retrives mosaics filtered by namespace id from resolution statements.
+	 * @param {NamespaceId} namespaceId Statement unresolved address.
+	 * @returns {Promise.<object>} mosaic ids
+	 */
+	async mosaicIdsByNamespaceId(namespaceId) {
+		let conditions = {};
+		if (undefined !== namespaceId)
+			conditions['statement.unresolved'] = convertToLong(namespaceId);
+
+		const resolutions = await this.catapultDb.queryDocuments('mosaicResolutionStatements', conditions);
+		const resolvedIds = [];
+		resolutions.map(resolution => resolution.statement.resolutionEntries.map(entry => entry.resolved)).map(ids => resolvedIds.push(...ids));
+
+		const activeMosaics = await this.activeMosaicsByIds(resolvedIds);
+		return activeMosaics.map(activeMosaic => activeMosaic.mosaic.id);
 	}
 }
 
